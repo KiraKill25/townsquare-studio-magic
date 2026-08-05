@@ -2,6 +2,9 @@ import type { Dictionary } from "./fr";
 
 export const en: Dictionary = {
   ui: {
+    soloPackSuffix: " — Lone Pack",
+    stepWakeAlt: "{role} awakening",
+    narratorAlt: "The game master, a masked storyteller with a glowing grimoire",
     back: "← Back",
     next: "Next",
     continue: "Continue",

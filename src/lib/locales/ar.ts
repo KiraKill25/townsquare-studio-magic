@@ -2,6 +2,9 @@ import type { Dictionary } from "./fr";
 
 export const ar: Dictionary = {
   ui: {
+    soloPackSuffix: " — قطيع منفرد",
+    stepWakeAlt: "استيقاظ دور {role}",
+    narratorAlt: "سيد اللعبة، راوٍ مقنّع يحمل كتابًا مضيئًا",
     back: "→ رجوع",
     next: "التالي",
     continue: "متابعة",

@@ -32,6 +32,7 @@ type Table = Record<string, string>;
 
 const NARRATION: Record<Lang, Table> = {
   fr: {
+    logVoteTally: "Jour {d} — Vote : [{tally}] → Éliminé(s) : {names}",
     lovers: "{a} et {b} sont désormais amoureux.",
     logCupid: "Cupidon lie {a} et {b}.",
     mimeCopy: "Tu copies le rôle : {role}.",
@@ -116,6 +117,7 @@ const NARRATION: Record<Lang, Table> = {
     cause_GENERAL_FAILED: "éliminé par le Maître du Jeu (coup manqué du Général)",
   },
   en: {
+    logVoteTally: "Day {d} — Vote: [{tally}] → Eliminated: {names}",
     lovers: "{a} and {b} are now lovers.",
     logCupid: "Cupid binds {a} and {b}.",
     mimeCopy: "You copy the role: {role}.",
@@ -199,6 +201,7 @@ const NARRATION: Record<Lang, Table> = {
     cause_GENERAL_FAILED: "removed by the Game Master (the General missed)",
   },
   ar: {
+    logVoteTally: "اليوم {d} — التصويت: [{tally}] ← المُقصى: {names}",
     lovers: "{a} و {b} أصبحا عاشقين.",
     logCupid: "كيوبيد يربط {a} و {b}.",
     mimeCopy: "أنت تنسخ الدور: {role}.",
