@@ -70,6 +70,7 @@ export const Route = createFileRoute("/game")({
 function GamePage() {
   const navigate = useNavigate();
   const { t } = useI18n();
+  const narrate = useNarrate();
   const [state, setState] = useState<GameState | null>(null);
   const [settings, setSettings] = useState<GameSettings | null>(null);
   const [transition, setTransition] = useState<"NIGHT" | "DAY" | null>("NIGHT");
@@ -358,7 +359,7 @@ function NightPanel({
   onUndo?: () => void;
   canUndo?: boolean;
 }) {
-  const { t, prompt } = useI18n();
+  const { t, prompt, roleName } = useI18n();
   const step = currentStep(state);
   const [sel, setSel] = useState<string[]>([]);
   const [execute, setExecute] = useState(false);
