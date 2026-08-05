@@ -14,6 +14,8 @@ import {
   type VoteRecord,
 } from "@/components/GameRecapCard";
 import { useI18n } from "@/lib/i18n";
+import { useNarrate } from "@/hooks/use-narrate";
+import { nk } from "@/lib/narration";
 import {
   clearBgm,
   playCheer,
@@ -68,6 +70,7 @@ export const Route = createFileRoute("/game")({
 function GamePage() {
   const navigate = useNavigate();
   const { t } = useI18n();
+  const narrate = useNarrate();
   const [state, setState] = useState<GameState | null>(null);
   const [settings, setSettings] = useState<GameSettings | null>(null);
   const [transition, setTransition] = useState<"NIGHT" | "DAY" | null>("NIGHT");
@@ -197,7 +200,7 @@ function GamePage() {
 
       {state.reveal && (
         <Overlay onClose={() => setState({ ...state, reveal: undefined })}>
-          {state.reveal}
+          {narrate(state.reveal)}
         </Overlay>
       )}
 
@@ -356,7 +359,7 @@ function NightPanel({
   onUndo?: () => void;
   canUndo?: boolean;
 }) {
-  const { t, prompt } = useI18n();
+  const { t, prompt, roleName } = useI18n();
   const step = currentStep(state);
   const [sel, setSel] = useState<string[]>([]);
   const [execute, setExecute] = useState(false);
@@ -441,13 +444,14 @@ function NightPanel({
   const attackedPlayerName = state.players.find((p) => p.id === state.round.attackedId)?.name;
 
   const stepPrompt = prompt(step.roleId) || step.prompt;
+  const stepTitle = `${roleName(step.roleId)}${step.soloKill ? t("soloPackSuffix") : ""}`;
 
   return (
     <div className="surface-card animate-rise-in neon-ring overflow-hidden rounded-3xl">
       <div className="relative aspect-[16/10] overflow-hidden">
         <img
           src={roleImage(step.roleId)}
-          alt={`Réveil du rôle ${step.title}`}
+          alt={t("stepWakeAlt", { role: stepTitle })}
           width={640}
           height={640}
           loading="lazy"
@@ -455,10 +459,10 @@ function NightPanel({
         />
         <div className="absolute inset-0 bg-gradient-to-t from-card via-card/30 to-transparent" />
         <p className="absolute bottom-3 left-4 text-lg font-black text-primary">
-          {step.title}
+          {stepTitle}
         </p>
         <div className="absolute right-3 bottom-3">
-          <SpeakButton text={step.title} />
+          <SpeakButton text={stepTitle} />
         </div>
       </div>
 
@@ -500,7 +504,7 @@ function NightPanel({
                       if (e.key === "Escape") setEditingWord(false);
                     }}
                     className="flex-1 rounded-2xl bg-input px-4 py-3 text-center text-3xl font-black outline-none focus:ring-2 focus:ring-primary"
-                    placeholder="Nouveau mot…"
+                    placeholder={t("newWordPlaceholder")}
                   />
                   <button
                     onClick={() => {
@@ -515,7 +519,7 @@ function NightPanel({
                   <button
                     onClick={() => setEditingWord(false)}
                     className="shrink-0 rounded-full border border-border p-3 text-muted-foreground"
-                    aria-label="Annuler"
+                    aria-label={t("cancel")}
                   >
                     <X className="size-4" />
                   </button>
@@ -818,6 +822,7 @@ function DawnPanel({
   canUndo?: boolean;
 }) {
   const { t } = useI18n();
+  const narrate = useNarrate();
   const [bavardModal, setBavardModal] = useState(false);
   const firstDay = state.day === 1 && !state.voteSkippedOffer;
   const alive = state.players.filter((p) => p.alive);
@@ -914,7 +919,7 @@ function DawnPanel({
 
       <NarratorCard
         title={t("dawnTitle", { n: state.day })}
-        text={state.dawnSummary.join(" ")}
+        text={state.dawnSummary.map((l) => narrate(l)).join(" ")}
       >
         {state.round.requiredWord && (
           <InlineWordEditor
@@ -1017,7 +1022,7 @@ function VotePanel({
       .map((id) => state.players.find((p) => p.id === id)?.name ?? id)
       .join(", ");
     next.log.push(
-      `Jour ${state.day} — Vote: [${tally || "—"}] → Éliminé(s): ${names}`,
+      nk("logVoteTally", { d: state.day, tally: tally || "—", names }),
     );
     return next;
   };
@@ -1063,7 +1068,16 @@ function VotePanel({
 
 
   const totalVotesCast = Object.values(votes).reduce((a, b) => a + b, 0);
-  const voteLimit = alive.length + 1;
+  // Corbeau : sa plume noire ajoute 2 voix à sa cible (nuit 2 et suivantes).
+  // Le total attendu passe donc de (vivants + 1) à (vivants + 3).
+  const raven = state.players.find(
+    (p) => p.alive && effectiveRoleId(p) === "corbeau" && !p.powersDisabled,
+  );
+  const ravenTarget = state.round.ravenTargetId
+    ? state.players.find((p) => p.id === state.round.ravenTargetId && p.alive)
+    : undefined;
+  const ravenActive = !!raven && !!ravenTarget;
+  const voteLimit = alive.length + (ravenActive ? 3 : 1);
 
   return (
     <NarratorCard

@@ -1,6 +1,9 @@
 /** Dictionnaire français — source de vérité des clés de traduction. */
 export const fr = {
   ui: {
+    soloPackSuffix: " — Meute Solitaire",
+    stepWakeAlt: "Réveil du rôle {role}",
+    narratorAlt: "Le meneur du jeu, conteur masqué au grimoire lumineux",
     // Commun
     back: "← Retour",
     next: "Suivant",

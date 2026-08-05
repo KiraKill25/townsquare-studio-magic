@@ -7,6 +7,7 @@ import { MuteButton } from "@/components/MuteButton";
 import { RecapWolfEmblem } from "@/components/RecapWolfEmblem";
 
 import { useI18n, type TranslationKey } from "@/lib/i18n";
+import { useNarrate } from "@/hooks/use-narrate";
 import {
   effectiveRoleId,
   type DeathCause,
@@ -108,6 +109,7 @@ export function GameRecapCard({
   onPlayAgain: () => void;
 }) {
   const { t, roleName, team: teamLabel } = useI18n();
+  const narrate = useNarrate();
   const [copied, setCopied] = useState(false);
 
   const wolves = state.winnerTeam === "WOLVES";
@@ -199,7 +201,7 @@ export function GameRecapCard({
             {t(victoryKey)}
           </h1>
 
-          <p className="text-sm text-muted-foreground">{state.winner ?? t("gameOverFallback")}</p>
+          <p className="text-sm text-muted-foreground">{state.winner ? narrate(state.winner) : t("gameOverFallback")}</p>
           <div className="flex flex-wrap justify-center gap-3 pt-1 text-xs text-muted-foreground">
             <span>{t("bilanDuration", { d: duration })}</span>
             <span>·</span>

@@ -8,7 +8,7 @@ const VIDEO_URL = "/media/game-master.mp4";
 
 
 export function NarratorCard({
-  title = "Le Meneur du Jeu",
+  title,
   text,
   children,
 }: {
@@ -17,9 +17,10 @@ export function NarratorCard({
   children?: React.ReactNode;
 }) {
   const ref = useRef<HTMLVideoElement>(null);
-  const { lang } = useI18n();
+  const { lang, t } = useI18n();
   const [guide, setGuide] = useState(false);
   const guideLabel = HOWTO[lang].openLabel;
+  const heading = title ?? t("narratorTitle");
 
 
   useEffect(() => {
@@ -50,7 +51,7 @@ export function NarratorCard({
         <video
           ref={ref}
           src={VIDEO_URL}
-          aria-label="Le meneur du jeu, conteur masqué au grimoire lumineux"
+          aria-label={t("narratorAlt")}
           autoPlay
           playsInline
           preload="auto"
@@ -71,7 +72,7 @@ export function NarratorCard({
           <Info className="size-4" />
         </button>
         <p className="pointer-events-none absolute bottom-3 left-4 text-xs font-bold tracking-[0.3em] text-primary uppercase">
-          {title}
+          {heading}
         </p>
       </div>
       <div className="space-y-4 p-5">
