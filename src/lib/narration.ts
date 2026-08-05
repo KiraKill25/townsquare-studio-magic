@@ -289,23 +289,64 @@ function localRoleName(lang: Lang, id: string): string {
   return ROLE_NAMES[lang]?.[id]?.name ?? ROLE_BY_ID[id]?.name ?? id;
 }
 
-const TOKEN = /\u27E6([^\u27E7]+)\u27E7(\{.*?\})/g;
-
-/** Traduit tous les jetons de narration contenus dans un texte. */
+/** Traduit tous les jetons de narration contenus dans un texte.
+ *  Analyse manuelle (accolades équilibrées) afin de supporter les jetons imbriqués. */
 export function resolveNarration(text: string, lang: Lang): string {
   if (!text || !text.includes(OPEN)) return text;
-  return text.replace(TOKEN, (_m, key: string, raw: string) => {
+  let out = "";
+  let i = 0;
+  while (i < text.length) {
+    const start = text.indexOf(OPEN, i);
+    if (start < 0) {
+      out += text.slice(i);
+      break;
+    }
+    out += text.slice(i, start);
+    const close = text.indexOf(CLOSE, start);
+    if (close < 0) {
+      out += text.slice(start);
+      break;
+    }
+    const key = text.slice(start + 1, close);
+    // Lecture du bloc JSON avec accolades équilibrées (chaînes ignorées).
+    let j = close + 1;
+    let depth = 0;
+    let inStr = false;
+    let esc = false;
+    for (; j < text.length; j++) {
+      const c = text[j];
+      if (inStr) {
+        if (esc) esc = false;
+        else if (c === "\\") esc = true;
+        else if (c === '"') inStr = false;
+        continue;
+      }
+      if (c === '"') inStr = true;
+      else if (c === "{") depth++;
+      else if (c === "}") {
+        depth--;
+        if (depth === 0) {
+          j++;
+          break;
+        }
+      }
+    }
+    const raw = text.slice(close + 1, j);
     let vars: Record<string, string | number> = {};
     try {
       vars = JSON.parse(raw) as Record<string, string | number>;
     } catch {
       vars = {};
     }
-    if (key === "@role") return localRoleName(lang, String(vars.id ?? ""));
-    const tpl = NARRATION[lang]?.[key] ?? NARRATION.fr[key];
-    if (!tpl) return "";
-    return tpl.replace(/\{(\w+)\}/g, (m, v: string) =>
-      v in vars ? resolveNarration(String(vars[v]), lang) : m,
-    );
-  });
+    if (key === "@role") {
+      out += localRoleName(lang, String(vars.id ?? ""));
+    } else {
+      const tpl = NARRATION[lang]?.[key] ?? NARRATION.fr[key] ?? "";
+      out += tpl.replace(/\{(\w+)\}/g, (m, v: string) =>
+        v in vars ? resolveNarration(String(vars[v]), lang) : m,
+      );
+    }
+    i = j;
+  }
+  return out;
 }
