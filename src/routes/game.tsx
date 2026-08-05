@@ -822,6 +822,7 @@ function DawnPanel({
   canUndo?: boolean;
 }) {
   const { t } = useI18n();
+  const narrate = useNarrate();
   const [bavardModal, setBavardModal] = useState(false);
   const firstDay = state.day === 1 && !state.voteSkippedOffer;
   const alive = state.players.filter((p) => p.alive);
