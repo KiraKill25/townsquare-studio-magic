@@ -23,6 +23,8 @@ export function isMuted(): boolean {
 export function initAudioPrefs() {
   if (typeof window === "undefined") return;
   muted = localStorage.getItem(MUTE_KEY) === "1";
+  installMediaGuard();
+  applyMasterMute();
   listeners.forEach((l) => l(muted));
 }
 
@@ -33,6 +35,90 @@ export function subscribeMute(fn: (m: boolean) => void): () => void {
   };
 }
 
+// ─────────────────────────────────────────────────────────────────────
+//  Master mute guard — overrides EVERY <audio> / <video> in the app
+// ─────────────────────────────────────────────────────────────────────
+
+/** Volume mémorisé avant coupure, pour restauration douce. */
+const prevVolume = new WeakMap<HTMLMediaElement, number>();
+let guardInstalled = false;
+
+/** Force (ou libère) la coupure sur tous les médias du document. */
+function applyMasterMute() {
+  if (typeof document === "undefined") return;
+  document.querySelectorAll<HTMLMediaElement>("audio,video").forEach((el) => {
+    if (muted) {
+      if (!el.muted) prevVolume.set(el, el.volume);
+      forceMuted(el, true);
+    } else {
+      forceMuted(el, false);
+      const v = prevVolume.get(el);
+      if (v !== undefined) el.volume = v;
+    }
+  });
+  if (muted && typeof window !== "undefined" && "speechSynthesis" in window)
+    window.speechSynthesis.cancel();
+}
+
+/** Écrit la propriété `muted` en contournant le setter patché. */
+function forceMuted(el: HTMLMediaElement, value: boolean) {
+  const desc = Object.getOwnPropertyDescriptor(
+    HTMLMediaElement.prototype,
+    "muted",
+  ) as (PropertyDescriptor & { __orig?: PropertyDescriptor }) | undefined;
+  const setter = desc?.__orig?.set ?? desc?.set;
+  if (setter) setter.call(el, value);
+  else el.muted = value;
+}
+
+/** Patche le prototype média + observe le DOM : aucun son ne peut passer. */
+function installMediaGuard() {
+  if (guardInstalled || typeof window === "undefined") return;
+  guardInstalled = true;
+
+  const proto = HTMLMediaElement.prototype;
+
+  // 1. Toute tentative de démuter est ignorée si le mute global est actif.
+  const mutedDesc = Object.getOwnPropertyDescriptor(proto, "muted");
+  if (mutedDesc?.set && mutedDesc.get) {
+    const patched: PropertyDescriptor & { __orig?: PropertyDescriptor } = {
+      configurable: true,
+      get(this: HTMLMediaElement) {
+        return mutedDesc.get!.call(this) as boolean;
+      },
+      set(this: HTMLMediaElement, value: boolean) {
+        mutedDesc.set!.call(this, muted ? true : value);
+      },
+    };
+    patched.__orig = mutedDesc;
+    Object.defineProperty(proto, "muted", patched);
+  }
+
+  // 2. Toute lecture démarre silencieuse tant que le mute global est actif.
+  const origPlay = proto.play;
+  proto.play = function (this: HTMLMediaElement) {
+    if (muted) {
+      if (!this.muted) prevVolume.set(this, this.volume);
+      forceMuted(this, true);
+    }
+    return origPlay.call(this);
+  };
+
+  // 3. Les médias ajoutés après coup sont couverts immédiatement.
+  const obs = new MutationObserver(() => {
+    if (muted) applyMasterMute();
+  });
+  obs.observe(document.documentElement, { childList: true, subtree: true });
+  document.addEventListener(
+    "play",
+    (e) => {
+      const el = e.target as HTMLMediaElement | null;
+      if (muted && el && "muted" in el) forceMuted(el, true);
+    },
+    true,
+  );
+}
+
 export function setMuted(next: boolean) {
   muted = next;
   try {
@@ -40,6 +126,8 @@ export function setMuted(next: boolean) {
   } catch {
     /* ignore */
   }
+  installMediaGuard();
+  applyMasterMute();
   if (bgmEl) {
     if (next) {
       // Fade out quickly then pause
@@ -59,6 +147,7 @@ export function setMuted(next: boolean) {
 export function toggleMuted() {
   setMuted(!muted);
 }
+
 
 // ─────────────────────────────────────────────────────────────────────
 //  BGM — HTML5 Audio with 1.5 s crossfade
