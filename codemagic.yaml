@@ -13,7 +13,7 @@ workflows:
           npm install --legacy-peer-deps
           npm install -D @capacitor/assets @capacitor/cli
           npm install @capacitor/core @capacitor/android @capacitor/splash-screen @capacitor/status-bar @capacitor-community/keep-awake
-      - name: STEP 2 - Build Dist & Setup Android
+      - name: STEP 2 - Build Web App & Setup Android
         script: |
           export NODE_ENV=development
           mkdir -p public assets
@@ -21,19 +21,24 @@ workflows:
           cp icon.png assets/icon.png 2>/dev/null || true
           cp icon.png assets/splash.png 2>/dev/null || true
           
-          # Clean old build folders
-          rm -rf android dist
+          # Clean old build outputs
+          rm -rf android dist .output
           
-          # 1. Build web bundle directly into /dist
-          npx vite build
+          # 1. Build web app using TanStack Start / Nitro
+          npm run build
+          
+          # Ensure dist compatibility link exists
+          if [ -d ".output/public" ]; then
+            cp -r .output/public dist
+          fi
           
           # 2. Add fresh Android native project
           npx cap add android
           
-          # 3. Generate icon & splash screen assets
+          # 3. Generate splash and app icon assets
           npx @capacitor/assets generate --android --iconBackgroundColor "#000000" --splashBackgroundColor "#000000" || true
           
-          # 4. Sync web assets to Android
+          # 4. Sync assets into Android native shell
           npx cap sync android
       - name: STEP 3 - Assemble APK
         script: |
