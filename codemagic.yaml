@@ -21,24 +21,40 @@ workflows:
           cp icon.png assets/icon.png 2>/dev/null || true
           cp icon.png assets/splash.png 2>/dev/null || true
           
-          # Clean old build outputs
+          # Clean previous build artifacts
           rm -rf android dist .output
           
-          # 1. Build web app using TanStack Start / Nitro
+          # 1. Build client bundle
           npm run build
           
-          # Ensure dist compatibility link exists
-          if [ -d ".output/public" ]; then
-            cp -r .output/public dist
+          # 2. Fail-safe: Ensure index.html exists in .output/public
+          mkdir -p .output/public
+          if [ ! -f .output/public/index.html ]; then
+            echo "Generating fallback index.html for Capacitor..."
+            ENTRY_JS=$(ls .output/public/assets/index-*.js 2>/dev/null | head -n 1 | xargs -n 1 basename || echo "")
+            cat <<EOF > .output/public/index.html
+          <!DOCTYPE html>
+          <html lang="en">
+            <head>
+              <meta charset="UTF-8" />
+              <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+              <title>Mourad's Ville</title>
+            </head>
+            <body>
+              <div id="root"></div>
+              <script type="module" src="/assets/$ENTRY_JS"></script>
+            </body>
+          </html>
+          EOF
           fi
           
-          # 2. Add fresh Android native project
+          # 3. Initialize Android shell
           npx cap add android
           
-          # 3. Generate splash and app icon assets
+          # 4. Generate app icons & splash screens
           npx @capacitor/assets generate --android --iconBackgroundColor "#000000" --splashBackgroundColor "#000000" || true
           
-          # 4. Sync assets into Android native shell
+          # 5. Sync web bundle to Android native folder
           npx cap sync android
       - name: STEP 3 - Assemble APK
         script: |
