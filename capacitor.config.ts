@@ -3,7 +3,7 @@ import { CapacitorConfig } from '@capacitor/cli';
 const config: CapacitorConfig = {
   appId: 'com.mouradsville.game',
   appName: "Mourad's Ville",
-  webDir: '.output/public',
+  webDir: 'dist',
   server: {
     androidScheme: 'https'
   },
