@@ -2,6 +2,12 @@ import type { Dictionary } from "./fr";
 
 export const ar: Dictionary = {
   ui: {
+    seatingTitle: "ترتيب الدائرة",
+    seatingHint: "اسحب لاعبًا فوق آخر لتبديل مقعديهما. ترتيب الدائرة يحدد الجيران.",
+    seatingTable: "الطاولة",
+    seatingCount: "{n} لاعبين",
+    seatingNodeLabel: "المقعد {n} — {name}",
+    seatingConfirm: "تأكيد الدائرة وبدء الليل",
     soloPackSuffix: " — قطيع منفرد",
     stepWakeAlt: "استيقاظ دور {role}",
     narratorAlt: "سيد اللعبة، راوٍ مقنّع يحمل كتابًا مضيئًا",

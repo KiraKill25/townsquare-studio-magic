@@ -1,6 +1,12 @@
 /** Dictionnaire français — source de vérité des clés de traduction. */
 export const fr = {
   ui: {
+    seatingTitle: "Disposition du cercle",
+    seatingHint: "Glisse un joueur sur un autre pour échanger leurs places. L'ordre du cercle détermine les voisins.",
+    seatingTable: "La table",
+    seatingCount: "{n} joueurs",
+    seatingNodeLabel: "Siège {n} — {name}",
+    seatingConfirm: "Valider le cercle & Commencer la nuit",
     soloPackSuffix: " — Meute Solitaire",
     stepWakeAlt: "Réveil du rôle {role}",
     narratorAlt: "Le meneur du jeu, conteur masqué au grimoire lumineux",

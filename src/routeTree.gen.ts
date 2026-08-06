@@ -15,6 +15,7 @@ import { Route as DistributionRouteImport } from './routes/distribution'
 import { Route as GameRouteImport } from './routes/game'
 import { Route as GamemasterRouteImport } from './routes/gamemaster'
 import { Route as RolesRouteImport } from './routes/roles'
+import { Route as SeatingRouteImport } from './routes/seating'
 import { Route as SetupRouteImport } from './routes/setup'
 
 const IndexRoute = IndexRouteImport.update({
@@ -47,6 +48,11 @@ const RolesRoute = RolesRouteImport.update({
   path: '/roles',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SeatingRoute = SeatingRouteImport.update({
+  id: '/seating',
+  path: '/seating',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SetupRoute = SetupRouteImport.update({
   id: '/setup',
   path: '/setup',
@@ -60,6 +66,7 @@ export interface FileRoutesByFullPath {
   '/game': typeof GameRoute
   '/gamemaster': typeof GamemasterRoute
   '/roles': typeof RolesRoute
+  '/seating': typeof SeatingRoute
   '/setup': typeof SetupRoute
 }
 export interface FileRoutesByTo {
@@ -69,6 +76,7 @@ export interface FileRoutesByTo {
   '/game': typeof GameRoute
   '/gamemaster': typeof GamemasterRoute
   '/roles': typeof RolesRoute
+  '/seating': typeof SeatingRoute
   '/setup': typeof SetupRoute
 }
 export interface FileRoutesById {
@@ -79,6 +87,7 @@ export interface FileRoutesById {
   '/game': typeof GameRoute
   '/gamemaster': typeof GamemasterRoute
   '/roles': typeof RolesRoute
+  '/seating': typeof SeatingRoute
   '/setup': typeof SetupRoute
 }
 export interface FileRouteTypes {
@@ -90,6 +99,7 @@ export interface FileRouteTypes {
     | '/game'
     | '/gamemaster'
     | '/roles'
+    | '/seating'
     | '/setup'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -99,6 +109,7 @@ export interface FileRouteTypes {
     | '/game'
     | '/gamemaster'
     | '/roles'
+    | '/seating'
     | '/setup'
   id:
     | '__root__'
@@ -108,6 +119,7 @@ export interface FileRouteTypes {
     | '/game'
     | '/gamemaster'
     | '/roles'
+    | '/seating'
     | '/setup'
   fileRoutesById: FileRoutesById
 }
@@ -118,6 +130,7 @@ export interface RootRouteChildren {
   GameRoute: typeof GameRoute
   GamemasterRoute: typeof GamemasterRoute
   RolesRoute: typeof RolesRoute
+  SeatingRoute: typeof SeatingRoute
   SetupRoute: typeof SetupRoute
 }
 
@@ -165,6 +178,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof RolesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/seating': {
+      id: '/seating'
+      path: '/seating'
+      fullPath: '/seating'
+      preLoaderRoute: typeof SeatingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/setup': {
       id: '/setup'
       path: '/setup'
@@ -182,6 +202,7 @@ const rootRouteChildren: RootRouteChildren = {
   GameRoute: GameRoute,
   GamemasterRoute: GamemasterRoute,
   RolesRoute: RolesRoute,
+  SeatingRoute: SeatingRoute,
   SetupRoute: SetupRoute,
 }
 export const routeTree = rootRouteImport
