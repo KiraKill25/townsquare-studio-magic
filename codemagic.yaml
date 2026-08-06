@@ -7,24 +7,33 @@ workflows:
       java: 21
       node: 22
     scripts:
-      - name: STEP 1 - Install Dependencies & Plugins
+      - name: STEP 1 - Install Dependencies
         script: |
           export NODE_ENV=development
           npm install --legacy-peer-deps
           npm install -D @capacitor/assets @capacitor/cli
           npm install @capacitor/core @capacitor/android @capacitor/splash-screen @capacitor/status-bar @capacitor-community/keep-awake
-      - name: STEP 2 - Build App & Sync Capacitor
+      - name: STEP 2 - Build Dist & Setup Android
         script: |
           export NODE_ENV=development
-          mkdir -p public
+          mkdir -p public assets
           cp icon.png public/icon.png 2>/dev/null || true
-          npm run build
-          mkdir -p assets
           cp icon.png assets/icon.png 2>/dev/null || true
           cp icon.png assets/splash.png 2>/dev/null || true
-          npx cap add android || true
+          
+          # Clean old android folder if broken
+          rm -rf android
+          
+          # 1. Build the web app into /dist
+          npm run build
+          
+          # 2. Add fresh Android native project
+          npx cap add android
+          
+          # 3. Generate icon/splash assets into Android project
           npx @capacitor/assets generate --android --iconBackgroundColor "#000000" --splashBackgroundColor "#000000" || true
-          npx cap copy android
+          
+          # 4. Sync web dist assets to Android
           npx cap sync android
       - name: STEP 3 - Assemble APK
         script: |
