@@ -2,6 +2,12 @@ import type { Dictionary } from "./fr";
 
 export const en: Dictionary = {
   ui: {
+    seatingTitle: "Circle seating",
+    seatingHint: "Drag a player onto another to swap their seats. The circle order defines neighbours.",
+    seatingTable: "The table",
+    seatingCount: "{n} players",
+    seatingNodeLabel: "Seat {n} — {name}",
+    seatingConfirm: "Confirm the circle & Start the night",
     soloPackSuffix: " — Lone Pack",
     stepWakeAlt: "{role} awakening",
     narratorAlt: "The game master, a masked storyteller with a glowing grimoire",

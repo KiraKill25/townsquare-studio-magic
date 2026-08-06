@@ -137,7 +137,7 @@ function DistributionPage() {
             <button
               onClick={() => {
                 saveSetup({ ...setup!, villageCaptainId: captain });
-                navigate({ to: "/game" });
+                navigate({ to: "/seating" });
               }}
               className="neon-ring animate-pulse-glow w-full rounded-full bg-primary py-4 font-bold text-primary-foreground"
             >
