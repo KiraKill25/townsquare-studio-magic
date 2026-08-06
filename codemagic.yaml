@@ -13,7 +13,7 @@ workflows:
           npm install --legacy-peer-deps
           npm install -D @capacitor/assets @capacitor/cli
           npm install @capacitor/core @capacitor/android @capacitor/splash-screen @capacitor/status-bar @capacitor-community/keep-awake
-      - name: STEP 2 - Build Web App & Setup Android
+      - name: STEP 2 - Build Web SPA & Setup Android
         script: |
           export NODE_ENV=development
           mkdir -p public assets
@@ -24,37 +24,16 @@ workflows:
           # Clean previous build artifacts
           rm -rf android dist .output
           
-          # 1. Build client bundle
-          npm run build
+          # 1. Build client bundle into /dist
+          npx vite build
           
-          # 2. Fail-safe: Ensure index.html exists in .output/public
-          mkdir -p .output/public
-          if [ ! -f .output/public/index.html ]; then
-            echo "Generating fallback index.html for Capacitor..."
-            ENTRY_JS=$(ls .output/public/assets/index-*.js 2>/dev/null | head -n 1 | xargs -n 1 basename || echo "")
-            cat <<EOF > .output/public/index.html
-          <!DOCTYPE html>
-          <html lang="en">
-            <head>
-              <meta charset="UTF-8" />
-              <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-              <title>Mourad's Ville</title>
-            </head>
-            <body>
-              <div id="root"></div>
-              <script type="module" src="/assets/$ENTRY_JS"></script>
-            </body>
-          </html>
-          EOF
-          fi
-          
-          # 3. Initialize Android shell
+          # 2. Add Android project
           npx cap add android
           
-          # 4. Generate app icons & splash screens
+          # 3. Generate splash and app icons
           npx @capacitor/assets generate --android --iconBackgroundColor "#000000" --splashBackgroundColor "#000000" || true
           
-          # 5. Sync web bundle to Android native folder
+          # 4. Sync assets into Android native shell
           npx cap sync android
       - name: STEP 3 - Assemble APK
         script: |
