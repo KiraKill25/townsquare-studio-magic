@@ -21,19 +21,19 @@ workflows:
           cp icon.png assets/icon.png 2>/dev/null || true
           cp icon.png assets/splash.png 2>/dev/null || true
           
-          # Clean old android folder if broken
-          rm -rf android
+          # Clean old build folders
+          rm -rf android dist
           
-          # 1. Build the web app into /dist
-          npm run build
+          # 1. Build web bundle directly into /dist
+          npx vite build
           
           # 2. Add fresh Android native project
           npx cap add android
           
-          # 3. Generate icon/splash assets into Android project
+          # 3. Generate icon & splash screen assets
           npx @capacitor/assets generate --android --iconBackgroundColor "#000000" --splashBackgroundColor "#000000" || true
           
-          # 4. Sync web dist assets to Android
+          # 4. Sync web assets to Android
           npx cap sync android
       - name: STEP 3 - Assemble APK
         script: |
