@@ -1,0 +1,35 @@
+workflows:
+  android-apk:
+    name: Build Offline Android APK
+    max_build_duration: 30
+    instance_type: mac_mini_m1
+    environment:
+      java: 21
+      node: 22
+    scripts:
+      - name: STEP 1 - Install Dependencies
+        script: |
+          export NODE_ENV=development
+          npm install --legacy-peer-deps
+          npm install -D @capacitor/assets
+      - name: STEP 2 - Build App & Sync Capacitor
+        script: |
+          export NODE_ENV=development
+          mkdir -p public
+          cp icon.png public/icon.png 2>/dev/null || true
+          npm run build
+          mkdir -p assets
+          cp icon.png assets/icon.png 2>/dev/null || true
+          cp icon.png assets/splash.png 2>/dev/null || true
+          npx cap add android || true
+          npx @capacitor/assets generate --android --iconBackgroundColor "#000000" --splashBackgroundColor "#000000" || true
+          npx cap copy android
+          npx cap sync android
+      - name: STEP 3 - Assemble APK
+        script: |
+          cd android
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
+          chmod +x gradlew
+          ./gradlew assembleDebug
+    artifacts:
+      - android/app/build/outputs/apk/**/*.apk
