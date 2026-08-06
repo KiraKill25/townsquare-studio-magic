@@ -7,11 +7,12 @@ workflows:
       java: 21
       node: 22
     scripts:
-      - name: STEP 1 - Install Dependencies
+      - name: STEP 1 - Install Dependencies & Plugins
         script: |
           export NODE_ENV=development
           npm install --legacy-peer-deps
-          npm install -D @capacitor/assets
+          npm install -D @capacitor/assets @capacitor/cli
+          npm install @capacitor/core @capacitor/android @capacitor/splash-screen @capacitor/status-bar @capacitor-community/keep-awake
       - name: STEP 2 - Build App & Sync Capacitor
         script: |
           export NODE_ENV=development
