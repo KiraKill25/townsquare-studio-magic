@@ -8,7 +8,10 @@ export const getRouter = () => {
   const router = createRouter({
     routeTree,
     context: { queryClient },
-    history: createHashHistory(), // Prevents 404 / white screen on offline Android WebView
+    // Hash history prevents 404 / white screen on offline Android WebView.
+    // Only available in the browser — omit during SSR.
+    ...(typeof window !== "undefined" ? { history: createHashHistory() } : {}),
+
     scrollRestoration: true,
     defaultPreloadStaleTime: 0,
   });
