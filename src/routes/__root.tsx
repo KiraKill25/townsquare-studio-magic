@@ -1,15 +1,25 @@
 import React, { useEffect } from 'react'
 import { createRootRoute, Outlet } from '@tanstack/react-router'
-import { StatusBar } from '@capacitor/status-bar'
-import { SplashScreen } from '@capacitor/splash-screen'
-import { KeepAwake } from '@capacitor-community/keep-awake'
 
 function RootComponent() {
   useEffect(() => {
-    // Hide System UI & Keep Screen Awake
-    SplashScreen.hide().catch(() => {})
-    StatusBar.hide().catch(() => {})
-    KeepAwake.keepAwake().catch(() => {})
+    // Native-only setup (Capacitor). Skipped gracefully on web.
+    const load = (name: string): Promise<any> =>
+      import(/* @vite-ignore */ name).catch(() => null)
+
+    const setupNative = async () => {
+      const [splash, status, awake] = await Promise.all([
+        load('@capacitor/splash-screen'),
+        load('@capacitor/status-bar'),
+        load('@capacitor-community/keep-awake'),
+      ])
+      splash?.SplashScreen?.hide?.().catch(() => {})
+      status?.StatusBar?.hide?.().catch(() => {})
+      awake?.KeepAwake?.keepAwake?.().catch(() => {})
+    }
+    setupNative()
+
+
 
     // --- Audio Freeze & Background Pause Fix ---
     const playingMedia = new Set<HTMLMediaElement>()
