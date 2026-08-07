@@ -1,13 +1,15 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
-import { Crown, Pencil, RotateCcw, Skull, Trophy, X } from "lucide-react";
+import { Crown, Pencil, RotateCcw, Skull, X } from "lucide-react";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { MuteButton } from "@/components/MuteButton";
 import { ROLE_BY_ID, TEAM_LABEL, roleImage } from "@/data/roles";
 import { NarratorCard } from "@/components/NarratorCard";
 import { PhaseTransition } from "@/components/PhaseTransition";
 import { SpeakButton } from "@/components/SpeakButton";
-import { DebateQueue } from "@/components/DebateQueue";
+import { CaptainDirectionModal, DebateWheel } from "@/components/DebateWheel";
+import { VoteWheel } from "@/components/VoteWheel";
+import type { RotationDirection } from "@/components/SeatingWheel";
 import { EliminationReveal } from "@/components/EliminationReveal";
 import {
   GameRecapCard,
@@ -15,12 +17,9 @@ import {
 } from "@/components/GameRecapCard";
 import { useI18n } from "@/lib/i18n";
 import { useNarrate } from "@/hooks/use-narrate";
-import { nk } from "@/lib/narration";
 import {
   clearBgm,
   playCheer,
-  playGavel,
-  playVoteTick,
   playWolfHowl,
   startBgm,
 } from "@/lib/audio";
@@ -36,13 +35,11 @@ import {
   createGame,
   currentStep,
   effectiveRoleId,
-  eliminateTied,
   executeTalkativeWolfAndSkip,
   goToVote,
   resolveHunter,
   skipVote,
   submitStep,
-  submitVote,
   assignCaptain,
   bearNeighbors,
   type GameState,
@@ -78,6 +75,8 @@ function GamePage() {
     { id: string; name: string; roleId: string }[] | null
   >(null);
   const [debateDoneDay, setDebateDoneDay] = useState(0);
+  const [direction, setDirection] = useState<RotationDirection>("clockwise");
+  const [directionDay, setDirectionDay] = useState(0);
   const [voteHistory, setVoteHistory] = useState<VoteRecord[]>([]);
   const [stateHistory, setStateHistory] = useState<GameState[]>([]);
   const lastPhase = useRef<string>("");
@@ -160,6 +159,14 @@ function GamePage() {
     );
 
   const isNight = state.phase.startsWith("NUIT");
+  const needsDirection =
+    !isNight &&
+    (state.phase === "AUBE" || state.phase === "JOUR_VOTE") &&
+    directionDay !== state.day &&
+    !state.reveal &&
+    !transition &&
+    !victims &&
+    !state.captainSuccessionPending;
   const phaseLabel = isNight
     ? t("nightN", { n: state.night })
     : t("dayN", { n: state.day });
@@ -204,6 +211,18 @@ function GamePage() {
         </Overlay>
       )}
 
+      {needsDirection && (
+        <CaptainDirectionModal
+          captainName={
+            state.players.find((p) => p.id === state.villageCaptainId)?.name
+          }
+          onPick={(d) => {
+            setDirection(d);
+            setDirectionDay(state.day);
+          }}
+        />
+      )}
+
       {state.phase === "EVENEMENT_MORT" ? (
         <HunterPanel state={state} onDone={setState} />
       ) : state.captainSuccessionPending ? (
@@ -212,6 +231,7 @@ function GamePage() {
         <DawnPanel
           state={state}
           settings={settings}
+          direction={direction}
           debateDone={debateDoneDay === state.day}
           onDebateDone={() => setDebateDoneDay(state.day)}
           onChange={updateState}
@@ -219,8 +239,9 @@ function GamePage() {
           canUndo={canUndo}
         />
       ) : state.phase === "JOUR_VOTE" ? (
-        <VotePanel
+        <VoteWheel
           state={state}
+          direction={direction}
           onVoteRecord={(r) => setVoteHistory((h) => [...h, r])}
           onChange={(next) => {
             if (next.lastEliminated?.length) setVictims(next.lastEliminated);
@@ -807,6 +828,7 @@ function NightPanel({
 function DawnPanel({
   state,
   settings,
+  direction,
   debateDone,
   onDebateDone,
   onChange,
@@ -815,6 +837,7 @@ function DawnPanel({
 }: {
   state: GameState;
   settings: GameSettings | null;
+  direction: RotationDirection;
   debateDone: boolean;
   onDebateDone: () => void;
   onChange: (s: GameState) => void;
@@ -867,10 +890,11 @@ function DawnPanel({
             })}
           </p>
         )}
-        <DebateQueue
-          players={alive.filter((p) => !p.mutedForDay)}
+        <DebateWheel
+          seating={alive}
           seconds={settings.debateTimePerPlayer}
           captainId={state.villageCaptainId}
+          direction={direction}
           onFinish={onDebateDone}
         />
         {UndoButton}
@@ -965,289 +989,6 @@ function DawnPanel({
 }
 
 // ─── Vote panel ───────────────────────────────────────────────────────────────
-
-function VotePanel({
-  state,
-  onChange,
-  onVoteRecord,
-  onUndo,
-  canUndo,
-}: {
-  state: GameState;
-  onChange: (s: GameState) => void;
-  onVoteRecord?: (r: VoteRecord) => void;
-  onUndo?: () => void;
-  canUndo?: boolean;
-}) {
-  const { t } = useI18n();
-  const alive = state.players.filter((p) => p.alive);
-  const [votes, setVotes] = useState<Record<string, number>>(() =>
-    Object.fromEntries(alive.map((p) => [p.id, p.baseVotes])),
-  );
-  const [tie, setTie] = useState<string[]>([]);
-  const [judgePick, setJudgePick] = useState<string[]>([]);
-  const [revoteRound, setRevoteRound] = useState(0);
-  const [gmElim, setGmElim] = useState<string[]>([]);
-  /** Joueurs à égalité : le panneau se restreint à eux pendant le départage. */
-  const [tieSubset, setTieSubset] = useState<string[]>([]);
-
-
-  const judge = state.players.find(
-    (p) => p.alive && effectiveRoleId(p) === "juge",
-  );
-
-  const resetVotes = () =>
-    setVotes(Object.fromEntries(alive.map((p) => [p.id, p.baseVotes])));
-
-  /** Build a VoteRecord snapshot from current vote state. */
-  const buildRecord = (eliminatedIds: string[], isRevote: boolean): VoteRecord => ({
-    day: state.day,
-    votes: alive
-      .map((p) => ({ id: p.id, name: p.name, count: votes[p.id] ?? 0 }))
-      .filter((v) => v.count > 0),
-    eliminated: eliminatedIds.map((id) => {
-      const p = state.players.find((x) => x.id === id)!;
-      return { id, name: p.name, roleId: effectiveRoleId(p), team: p.team };
-    }),
-    isRevote,
-  });
-
-  /** Build a tally log entry and push it onto the returned state. */
-  const withTallyLog = (next: GameState, elimIds: string[]): GameState => {
-    const tally = alive
-      .filter((p) => (votes[p.id] ?? 0) > 0)
-      .map((p) => `${p.name}×${votes[p.id]}`)
-      .join(", ");
-    const names = elimIds
-      .map((id) => state.players.find((p) => p.id === id)?.name ?? id)
-      .join(", ");
-    next.log.push(
-      nk("logVoteTally", { d: state.day, tally: tally || "—", names }),
-    );
-    return next;
-  };
-
-  /** GM confirms their elimination pick. */
-  const confirmElim = () => {
-    if (gmElim.length === 0) return;
-    playGavel();
-    if (gmElim.length === 1) {
-      const record = buildRecord(gmElim, revoteRound > 0);
-      onVoteRecord?.(record);
-      onChange(withTallyLog(submitVote(state, gmElim[0], true), gmElim));
-      return;
-    }
-    // Multiple selected
-    if (judge) {
-      setTieSubset(gmElim);
-      setTie(gmElim);
-      return;
-    }
-    if (revoteRound < 1) {
-      setTieSubset(gmElim);
-      setRevoteRound(1);
-      resetVotes();
-      setGmElim([]);
-      return;
-    }
-    // Second tie: eliminate all
-    const record = buildRecord(gmElim, true);
-    onVoteRecord?.(record);
-    onChange(withTallyLog(eliminateTied(state, gmElim, true), gmElim));
-  };
-
-  // Départage : on ne montre que les joueurs à égalité.
-  const inTieBreak = tieSubset.length > 1;
-  const pool = inTieBreak ? alive.filter((p) => tieSubset.includes(p.id)) : alive;
-
-  // Classement automatique : le plus voté en tête, le moins voté en bas.
-  const ranked = [...pool].sort((a, b) => (votes[b.id] ?? 0) - (votes[a.id] ?? 0));
-
-  // Players the GM can pick for elimination (alive + not immune to day vote)
-  const elimCandidates = ranked.filter((p) => !p.immuneToDayVote);
-
-
-  const totalVotesCast = Object.values(votes).reduce((a, b) => a + b, 0);
-  // Corbeau : sa plume noire ajoute 2 voix à sa cible (nuit 2 et suivantes).
-  // Le total attendu passe donc de (vivants + 1) à (vivants + 3).
-  const raven = state.players.find(
-    (p) => p.alive && effectiveRoleId(p) === "corbeau" && !p.powersDisabled,
-  );
-  const ravenTarget = state.round.ravenTargetId
-    ? state.players.find((p) => p.id === state.round.ravenTargetId && p.alive)
-    : undefined;
-  const ravenActive = !!raven && !!ravenTarget;
-  const voteLimit = alive.length + (ravenActive ? 3 : 1);
-
-  return (
-    <NarratorCard
-      title={`${t("voteTitle", { n: state.day })}${revoteRound ? t("revoteSuffix") : ""}`}
-      text={t("voteText")}
-    >
-      {/* Running tally (display only) */}
-      <div className="flex items-center justify-between rounded-xl border border-border px-3 py-2 text-sm">
-        <span className="text-xs tracking-widest text-muted-foreground uppercase">
-          {t("voteTotal", { c: totalVotesCast, t: voteLimit })}
-        </span>
-        <span
-          className={`font-black tabular-nums ${
-            totalVotesCast > voteLimit
-              ? "text-destructive"
-              : totalVotesCast === voteLimit
-                ? "text-primary"
-                : "text-foreground"
-          }`}
-        >
-          {totalVotesCast} / {voteLimit}
-        </span>
-      </div>
-
-      {inTieBreak && (
-        <p className="rounded-xl border border-primary/40 px-3 py-2 text-xs tracking-widest text-primary uppercase">
-          {t("tieBreakOnly", { n: tieSubset.length })}
-        </p>
-      )}
-
-
-      <ul className="space-y-2">
-        {ranked.map((p, idx) => (
-          <li
-            key={p.id}
-            className="flex items-center justify-between rounded-xl border border-border px-3 py-2 text-sm"
-          >
-            <span className="flex flex-wrap items-center gap-x-2">
-              <b className="text-[10px] tabular-nums text-muted-foreground">#{idx + 1}</b>
-              {p.name}
-              {p.isCaptain && (
-                <Crown className="size-3.5 text-accent" aria-label={t("captain")} />
-              )}
-              {p.voteWeight === 2 && (
-                <span className="text-[10px] text-primary uppercase">{t("captainX2")}</span>
-              )}
-              {!p.canVote && (
-                <span className="text-[10px] text-muted-foreground uppercase">{t("cannotVote")}</span>
-              )}
-              {p.immuneToDayVote && (
-                <span className="text-[10px] text-muted-foreground uppercase">{t("immune")}</span>
-              )}
-            </span>
-            <span className="flex items-center gap-3">
-              <button
-                aria-label={t("removeVote", { name: p.name })}
-                onClick={() => {
-                  playVoteTick();
-                  setVotes((v) => ({ ...v, [p.id]: Math.max(0, v[p.id] - 1) }));
-                }}
-                className="size-7 rounded-full border border-border"
-              >
-                −
-              </button>
-              <b className="w-5 text-center">{votes[p.id]}</b>
-              <button
-                aria-label={t("addVote", { name: p.name })}
-                onClick={() => {
-                  playVoteTick();
-                  setVotes((v) => ({ ...v, [p.id]: v[p.id] + 1 }));
-                }}
-                className="size-7 rounded-full bg-primary text-primary-foreground"
-              >
-                +
-              </button>
-            </span>
-          </li>
-        ))}
-      </ul>
-
-      {/* Judge tie-breaker panel */}
-      {tie.length > 1 ? (
-        <div className="space-y-3 rounded-2xl border border-primary/40 p-4">
-          <p className="text-sm text-primary">{t("tieJudge")}</p>
-          {tie.map((id) => {
-            const picked = judgePick.includes(id);
-            return (
-              <button
-                key={id}
-                onClick={() =>
-                  setJudgePick((s) =>
-                    picked ? s.filter((x) => x !== id) : [...s, id],
-                  )
-                }
-                className={`w-full rounded-full py-3 text-sm ${picked ? "bg-primary font-bold text-primary-foreground" : "border border-primary"}`}
-              >
-                {state.players.find((p) => p.id === id)?.name}
-              </button>
-            );
-          })}
-          <button
-            disabled={judgePick.length === 0}
-            onClick={() => {
-              const record = buildRecord(judgePick, revoteRound > 0);
-              onVoteRecord?.(record);
-              const next =
-                judgePick.length === 1
-                  ? submitVote(state, judgePick[0], true)
-                  : eliminateTied(state, judgePick, true);
-              onChange(withTallyLog(next, judgePick));
-            }}
-            className="neon-ring w-full rounded-full bg-primary py-3 text-sm font-bold text-primary-foreground disabled:opacity-40"
-          >
-            {t("judgeExecute")}
-          </button>
-          <button
-            onClick={() => {
-              setTie([]);
-              setJudgePick([]);
-              setRevoteRound(1);
-              resetVotes();
-              setGmElim([]);
-            }}
-            className="w-full rounded-full border border-primary py-3 text-sm font-bold text-primary"
-          >
-            {t("orderRevote")}
-          </button>
-          <p className="text-xs text-muted-foreground">{t("tieNote")}</p>
-        </div>
-      ) : (
-        /* GM explicitly picks who to eliminate */
-        <div className="space-y-3">
-          <p className="text-xs tracking-widest text-primary uppercase">
-            {t("gmSelectElim")}
-          </p>
-          <p className="text-xs text-muted-foreground">{t("gmSelectElimHint")}</p>
-          <p className="text-[11px] tracking-widest text-muted-foreground uppercase">
-            {t("voteRanking")}
-          </p>
-          <PlayerPicker
-            players={elimCandidates}
-            selected={gmElim}
-            onToggle={(id) =>
-              setGmElim((s) =>
-                s.includes(id) ? s.filter((x) => x !== id) : [...s, id],
-              )
-            }
-          />
-          <button
-            disabled={gmElim.length === 0}
-            onClick={confirmElim}
-            className="neon-ring w-full rounded-full bg-primary py-3 font-bold text-primary-foreground disabled:opacity-40"
-          >
-            {t("gmConfirmElim")}
-          </button>
-        </div>
-      )}
-
-      {canUndo && onUndo && (
-        <button
-          onClick={onUndo}
-          className="flex items-center gap-1.5 rounded-full border border-border px-4 py-2 text-xs font-semibold text-muted-foreground"
-        >
-          <RotateCcw className="size-3.5" />
-          {t("undoStep")}
-        </button>
-      )}
-    </NarratorCard>
-  );
-}
 
 // ─── Game over / Bilan de Partie ──────────────────────────────────────────────
 
