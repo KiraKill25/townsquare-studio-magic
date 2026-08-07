@@ -4,21 +4,21 @@ import { createRootRoute, Outlet } from '@tanstack/react-router'
 function RootComponent() {
   useEffect(() => {
     // Native-only setup (Capacitor). Skipped gracefully on web.
+    const load = (name: string): Promise<any> =>
+      import(/* @vite-ignore */ name).catch(() => null)
+
     const setupNative = async () => {
-      try {
-        const [{ SplashScreen }, { StatusBar }, { KeepAwake }] = await Promise.all([
-          import(/* @vite-ignore */ '@capacitor/splash-screen'),
-          import(/* @vite-ignore */ '@capacitor/status-bar'),
-          import(/* @vite-ignore */ '@capacitor-community/keep-awake'),
-        ])
-        SplashScreen.hide().catch(() => {})
-        StatusBar.hide().catch(() => {})
-        KeepAwake.keepAwake().catch(() => {})
-      } catch {
-        // Capacitor plugins unavailable (web preview)
-      }
+      const [splash, status, awake] = await Promise.all([
+        load('@capacitor/splash-screen'),
+        load('@capacitor/status-bar'),
+        load('@capacitor-community/keep-awake'),
+      ])
+      splash?.SplashScreen?.hide?.().catch(() => {})
+      status?.StatusBar?.hide?.().catch(() => {})
+      awake?.KeepAwake?.keepAwake?.().catch(() => {})
     }
     setupNative()
+
 
 
     // --- Audio Freeze & Background Pause Fix ---
