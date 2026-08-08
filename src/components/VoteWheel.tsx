@@ -3,7 +3,7 @@ import { ChevronDown, Crown, Gavel, RotateCcw, X } from "lucide-react";
 import { NarratorCard } from "@/components/NarratorCard";
 import {
   SeatingWheel,
-  buildTurnQueue,
+  buildVoteQueue,
   type RotationDirection,
 } from "@/components/SeatingWheel";
 import type { VoteRecord } from "@/components/GameRecapCard";
@@ -25,6 +25,7 @@ const ABSTAIN = "__abstain__";
 export function VoteWheel({
   state,
   direction,
+  captainVotesFirst = true,
   onChange,
   onVoteRecord,
   onUndo,
@@ -32,6 +33,8 @@ export function VoteWheel({
 }: {
   state: GameState;
   direction: RotationDirection;
+  /** Le capitaine vote en premier (sinon en dernier). */
+  captainVotesFirst?: boolean;
   onChange: (s: GameState) => void;
   onVoteRecord?: (r: VoteRecord) => void;
   onUndo?: () => void;
@@ -41,7 +44,8 @@ export function VoteWheel({
   const alive = state.players.filter((p) => p.alive);
   const seating = alive;
 
-  const [votes, setVotes] = useState<Record<string, string>>({});
+  /** Bulletins : votant → liste de cibles (1 point chacune, 2 pour le capitaine). */
+  const [votes, setVotes] = useState<Record<string, string[]>>({});
   const [idx, setIdx] = useState(0);
   const [tallied, setTallied] = useState(false);
   const [judgeMode, setJudgeMode] = useState(false);
@@ -50,52 +54,89 @@ export function VoteWheel({
   const [tieSubset, setTieSubset] = useState<string[]>([]);
   const [revoteRound, setRevoteRound] = useState(0);
   const [auditOpen, setAuditOpen] = useState(false);
+  const [splitMode, setSplitMode] = useState(false);
+  const [splitPick, setSplitPick] = useState<string[]>([]);
+  const [doubleElim, setDoubleElim] = useState(false);
 
   const judge = state.players.find(
     (p) => p.alive && effectiveRoleId(p) === "juge",
   );
 
+  const inTieBreak = tieSubset.length > 1;
+
   const voters = useMemo(
     () =>
-      buildTurnQueue(seating, state.villageCaptainId, direction).filter(
-        (p) => p.canVote,
+      buildVoteQueue(
+        seating,
+        state.villageCaptainId,
+        direction,
+        captainVotesFirst,
+      ).filter(
+        // Revote : les joueurs à égalité ne votent pas.
+        (p) => p.canVote && (!inTieBreak || !tieSubset.includes(p.id)),
       ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [state.players, direction, state.villageCaptainId, revoteRound],
+    [
+      state.players,
+      direction,
+      state.villageCaptainId,
+      captainVotesFirst,
+      revoteRound,
+      inTieBreak,
+      tieSubset,
+    ],
   );
 
-  const inTieBreak = tieSubset.length > 1;
   const candidates = alive.filter(
     (p) => !p.immuneToDayVote && (!inTieBreak || tieSubset.includes(p.id)),
   );
 
-  /** Décompte vivant : voix de base (plume du Corbeau) + poids des votants. */
+  /** Décompte vivant : voix de base (plume du Corbeau) + points des bulletins. */
   const counts = useMemo(() => {
     const c: Record<string, number> = {};
-    for (const p of alive) c[p.id] = inTieBreak && !tieSubset.includes(p.id) ? 0 : p.baseVotes;
-    for (const [voterId, targetId] of Object.entries(votes)) {
-      if (targetId === ABSTAIN) continue;
-      const voter = state.players.find((p) => p.id === voterId);
-      if (!voter) continue;
-      c[targetId] = (c[targetId] ?? 0) + voter.voteWeight;
+    for (const p of alive)
+      c[p.id] = inTieBreak && !tieSubset.includes(p.id) ? 0 : p.baseVotes;
+    for (const targets of Object.values(votes)) {
+      for (const targetId of targets) {
+        if (targetId === ABSTAIN) continue;
+        c[targetId] = (c[targetId] ?? 0) + 1;
+      }
     }
     return c;
-  }, [votes, alive, state.players, inTieBreak, tieSubset]);
+  }, [votes, alive, inTieBreak, tieSubset]);
 
   const voterList = (targetId: string) =>
     Object.entries(votes)
-      .filter(([, tid]) => tid === targetId)
+      .filter(([, targets]) => targets.includes(targetId))
       .map(([vid]) => state.players.find((p) => p.id === vid))
       .filter((p): p is Player => !!p);
 
   const currentVoter = voters[idx];
+  const isCaptainTurn =
+    !!currentVoter && currentVoter.id === state.villageCaptainId;
   const allVoted = idx >= voters.length;
 
+  const commit = (voterId: string, targets: string[]) => {
+    playVoteTick();
+    setVotes((v) => ({ ...v, [voterId]: targets }));
+    setIdx((i) => i + 1);
+    setSplitMode(false);
+    setSplitPick([]);
+  };
+
+  /** Clic simple : 1 point (2 pour le capitaine hors mode séparé). */
   const cast = (targetId: string) => {
     if (!currentVoter) return;
-    playVoteTick();
-    setVotes((v) => ({ ...v, [currentVoter.id]: targetId }));
-    setIdx((i) => i + 1);
+    if (targetId === ABSTAIN) return commit(currentVoter.id, [ABSTAIN]);
+    if (isCaptainTurn && splitMode) {
+      const next = [...splitPick, targetId];
+      if (next.length >= 2) return commit(currentVoter.id, next);
+      setSplitPick(next);
+      playVoteTick();
+      return;
+    }
+    const points = isCaptainTurn ? 2 : Math.max(1, currentVoter.voteWeight);
+    commit(currentVoter.id, Array.from({ length: points }, () => targetId));
   };
 
   const undoVote = (voterId: string) => {
@@ -118,6 +159,8 @@ export function VoteWheel({
     setJudgeMode(false);
     setJudgePick([]);
     setCaptainMode(false);
+    setSplitMode(false);
+    setSplitPick([]);
     setTieSubset(subset);
     setRevoteRound((r) => r + 1);
   };
@@ -128,11 +171,23 @@ export function VoteWheel({
   const top = counts[ranked[0]?.id ?? ""] ?? 0;
   const leaders = ranked.filter((p) => (counts[p.id] ?? 0) === top && top > 0);
 
+  const sameAsPreviousTie =
+    inTieBreak &&
+    leaders.length > 1 &&
+    leaders.every((p) => tieSubset.includes(p.id)) &&
+    leaders.length === tieSubset.length;
+
   const buildRecord = (eliminatedIds: string[]): VoteRecord => ({
     day: state.day,
     votes: alive
       .map((p) => ({ id: p.id, name: p.name, count: counts[p.id] ?? 0 }))
       .filter((v) => v.count > 0),
+    ballots: Object.entries(votes).map(([voterId, targets]) => ({
+      voterId,
+      voterName: state.players.find((p) => p.id === voterId)?.name ?? voterId,
+      targets: targets.filter((tid) => tid !== ABSTAIN),
+      abstained: targets.includes(ABSTAIN),
+    })),
     eliminated: eliminatedIds.map((id) => {
       const p = state.players.find((x) => x.id === id)!;
       return { id, name: p.name, roleId: effectiveRoleId(p), team: p.team };
@@ -164,14 +219,35 @@ export function VoteWheel({
     onChange(withTallyLog(next, ids));
   };
 
+  /** Dépouillement : double égalité consécutive → double élimination auto. */
+  const tally = () => {
+    if (sameAsPreviousTie) {
+      setDoubleElim(true);
+      eliminate(leaders.map((p) => p.id));
+      return;
+    }
+    setTallied(true);
+  };
+
   return (
     <NarratorCard
       title={`${t("voteTitle", { n: state.day })}${revoteRound ? t("revoteSuffix") : ""}`}
       text={t("voteText")}
     >
       {inTieBreak && (
-        <p className="rounded-xl border border-primary/40 px-3 py-2 text-center text-xs tracking-widest text-primary uppercase">
-          {t("tieBreakOnly", { n: tieSubset.length })}
+        <div className="space-y-1">
+          <p className="rounded-xl border border-primary/40 px-3 py-2 text-center text-xs tracking-widest text-primary uppercase">
+            {t("tieBreakOnly", { n: tieSubset.length })}
+          </p>
+          <p className="text-center text-[11px] text-muted-foreground">
+            {t("revoteTiedExcluded")}
+          </p>
+        </div>
+      )}
+
+      {doubleElim && (
+        <p className="rounded-xl border border-destructive/50 px-3 py-2 text-center text-xs font-bold text-destructive">
+          {t("doubleElimAnnounce")}
         </p>
       )}
 
@@ -224,6 +300,50 @@ export function VoteWheel({
         }
       />
 
+      {/* Capitaine : 2 points à poser ensemble ou à séparer */}
+      {!allVoted && isCaptainTurn && (
+        <div className="space-y-2 rounded-2xl border border-accent/40 p-3">
+          <p className="flex items-center gap-1.5 text-xs font-bold text-accent">
+            <Crown className="size-3.5" />
+            {t("captainSplitTitle")}
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => {
+                setSplitMode(false);
+                setSplitPick([]);
+              }}
+              className={`rounded-full py-2 text-[11px] font-bold ${!splitMode ? "bg-accent text-background" : "border border-accent/60 text-accent"}`}
+            >
+              {t("captainVoteBoth")}
+            </button>
+            <button
+              onClick={() => {
+                setSplitMode(true);
+                setSplitPick([]);
+              }}
+              className={`rounded-full py-2 text-[11px] font-bold ${splitMode ? "bg-accent text-background" : "border border-accent/60 text-accent"}`}
+            >
+              {t("captainVoteSplit")}
+            </button>
+          </div>
+          {splitMode && (
+            <p className="text-[11px] text-muted-foreground">
+              {splitPick.length === 0
+                ? t("captainSplitPickA")
+                : t("captainSplitPickB")}
+              {splitPick.length > 0 && (
+                <span className="ms-1 font-bold text-accent">
+                  {
+                    state.players.find((p) => p.id === splitPick[0])?.name
+                  }
+                </span>
+              )}
+            </p>
+          )}
+        </div>
+      )}
+
       {!allVoted && (
         <button
           onClick={() => cast(ABSTAIN)}
@@ -247,7 +367,7 @@ export function VoteWheel({
                 </b>
                 {p.name}
                 {p.isCaptain && <Crown className="size-3.5 text-accent" />}
-                {p.voteWeight === 2 && (
+                {p.isCaptain && (
                   <span className="text-[10px] text-primary uppercase">
                     {t("captainX2")}
                   </span>
@@ -302,20 +422,38 @@ export function VoteWheel({
             {voters
               .filter((v) => votes[v.id])
               .map((v) => {
-                const tid = votes[v.id];
-                const target = state.players.find((p) => p.id === tid);
+                const targets = votes[v.id] ?? [];
+                const name = (id?: string) =>
+                  state.players.find((p) => p.id === id)?.name ?? "—";
+                const line = targets.includes(ABSTAIN)
+                  ? t("auditAbstain", { voter: v.name })
+                  : targets.length === 2 && targets[0] !== targets[1]
+                    ? t("auditSplitLine", {
+                        voter: v.name,
+                        target: name(targets[0]),
+                        target2: name(targets[1]),
+                      })
+                    : targets.length === 2
+                      ? t("auditDoubleLine", {
+                          voter: v.name,
+                          target: name(targets[0]),
+                        })
+                      : t("auditLine", {
+                          voter: v.name,
+                          target: name(targets[0]),
+                        });
                 return (
                   <li
                     key={v.id}
                     className="flex items-center justify-between gap-2 text-xs"
                   >
-                    <span>
-                      {tid === ABSTAIN
-                        ? t("auditAbstain", { voter: v.name })
-                        : t("auditLine", {
-                            voter: v.name,
-                            target: target?.name ?? "—",
-                          })}
+                    <span className="flex flex-wrap items-center gap-1">
+                      {line}
+                      {targets.length === 2 && targets[0] !== targets[1] && (
+                        <span className="rounded-full bg-accent/20 px-1.5 text-[9px] font-bold text-accent uppercase">
+                          {t("splitBadge")}
+                        </span>
+                      )}
                     </span>
                     <button
                       onClick={() => undoVote(v.id)}
@@ -334,7 +472,7 @@ export function VoteWheel({
       {/* Résolution */}
       {!tallied ? (
         <button
-          onClick={() => setTallied(true)}
+          onClick={tally}
           className="neon-ring w-full rounded-full bg-primary py-3 font-bold text-primary-foreground"
         >
           {t("tallyComplete")}
