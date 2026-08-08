@@ -123,3 +123,59 @@ export function buildTurnQueue(
   }
   return queue;
 }
+
+/** Voisins vivants du capitaine dans l'ordre choisi (capitaine exclu). */
+function othersInDirection(
+  seating: Player[],
+  captainId: string | undefined,
+  direction: RotationDirection,
+): Player[] {
+  const alive = seating.filter((p) => p.alive);
+  const capIndex = seating.findIndex((p) => p.id === captainId);
+  if (capIndex < 0)
+    return direction === "clockwise" ? alive : [...alive].reverse();
+  const n = seating.length;
+  const out: Player[] = [];
+  for (let k = 1; k < n; k++) {
+    const idx =
+      direction === "clockwise"
+        ? (capIndex + k) % n
+        : (((capIndex - k) % n) + n) % n;
+    const p = seating[idx];
+    if (p?.alive && p.id !== captainId) out.push(p);
+  }
+  return out;
+}
+
+/**
+ * File du débat : le capitaine ouvre, puis les joueurs dans le sens choisi,
+ * puis le capitaine referme le débat (discours de clôture).
+ */
+export function buildDebateQueue(
+  seating: Player[],
+  captainId: string | undefined,
+  direction: RotationDirection,
+): { player: Player; role: "opening" | "normal" | "closing" }[] {
+  const captain = seating.find((p) => p.id === captainId && p.alive);
+  const others = othersInDirection(seating, captainId, direction);
+  if (!captain)
+    return others.map((player) => ({ player, role: "normal" as const }));
+  return [
+    { player: captain, role: "opening" as const },
+    ...others.map((player) => ({ player, role: "normal" as const })),
+    { player: captain, role: "closing" as const },
+  ];
+}
+
+/** File de vote : capitaine en premier ou en dernier, selon son choix. */
+export function buildVoteQueue(
+  seating: Player[],
+  captainId: string | undefined,
+  direction: RotationDirection,
+  captainVotesFirst: boolean,
+): Player[] {
+  const captain = seating.find((p) => p.id === captainId && p.alive);
+  const others = othersInDirection(seating, captainId, direction);
+  if (!captain) return others;
+  return captainVotesFirst ? [captain, ...others] : [...others, captain];
+}
