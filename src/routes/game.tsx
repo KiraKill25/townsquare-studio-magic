@@ -7,7 +7,7 @@ import { ROLE_BY_ID, TEAM_LABEL, roleImage } from "@/data/roles";
 import { NarratorCard } from "@/components/NarratorCard";
 import { PhaseTransition } from "@/components/PhaseTransition";
 import { SpeakButton } from "@/components/SpeakButton";
-import { CaptainDirectionModal, DebateWheel } from "@/components/DebateWheel";
+import { CaptainSetupModal, DebateWheel } from "@/components/DebateWheel";
 import { VoteWheel } from "@/components/VoteWheel";
 import type { RotationDirection } from "@/components/SeatingWheel";
 import { EliminationReveal } from "@/components/EliminationReveal";
@@ -76,6 +76,9 @@ function GamePage() {
   >(null);
   const [debateDoneDay, setDebateDoneDay] = useState(0);
   const [direction, setDirection] = useState<RotationDirection>("clockwise");
+  const [voteDirection, setVoteDirection] =
+    useState<RotationDirection>("clockwise");
+  const [captainVotesFirst, setCaptainVotesFirst] = useState(true);
   const [directionDay, setDirectionDay] = useState(0);
   const [voteHistory, setVoteHistory] = useState<VoteRecord[]>([]);
   const [stateHistory, setStateHistory] = useState<GameState[]>([]);
@@ -212,12 +215,14 @@ function GamePage() {
       )}
 
       {needsDirection && (
-        <CaptainDirectionModal
+        <CaptainSetupModal
           captainName={
             state.players.find((p) => p.id === state.villageCaptainId)?.name
           }
-          onPick={(d) => {
-            setDirection(d);
+          onConfirm={(setup) => {
+            setDirection(setup.debateDirection);
+            setVoteDirection(setup.voteDirection);
+            setCaptainVotesFirst(setup.captainVotesFirst);
             setDirectionDay(state.day);
           }}
         />
@@ -232,6 +237,7 @@ function GamePage() {
           state={state}
           settings={settings}
           direction={direction}
+          setupDone={directionDay === state.day}
           debateDone={debateDoneDay === state.day}
           onDebateDone={() => setDebateDoneDay(state.day)}
           onChange={updateState}
@@ -241,7 +247,8 @@ function GamePage() {
       ) : state.phase === "JOUR_VOTE" ? (
         <VoteWheel
           state={state}
-          direction={direction}
+          direction={voteDirection}
+          captainVotesFirst={captainVotesFirst}
           onVoteRecord={(r) => setVoteHistory((h) => [...h, r])}
           onChange={(next) => {
             if (next.lastEliminated?.length) setVictims(next.lastEliminated);
@@ -829,6 +836,7 @@ function DawnPanel({
   state,
   settings,
   direction,
+  setupDone,
   debateDone,
   onDebateDone,
   onChange,
@@ -838,6 +846,7 @@ function DawnPanel({
   state: GameState;
   settings: GameSettings | null;
   direction: RotationDirection;
+  setupDone: boolean;
   debateDone: boolean;
   onDebateDone: () => void;
   onChange: (s: GameState) => void;
@@ -895,6 +904,7 @@ function DawnPanel({
           seconds={settings.debateTimePerPlayer}
           captainId={state.villageCaptainId}
           direction={direction}
+          armed={setupDone}
           onFinish={onDebateDone}
         />
         {UndoButton}
