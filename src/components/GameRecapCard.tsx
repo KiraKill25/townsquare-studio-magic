@@ -5,6 +5,7 @@ import { ROLE_BY_ID } from "@/data/roles";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { MuteButton } from "@/components/MuteButton";
 import { RecapWolfEmblem } from "@/components/RecapWolfEmblem";
+import { EvaluationSection } from "@/components/EvaluationSection";
 
 import { useI18n, type TranslationKey } from "@/lib/i18n";
 import { useNarrate } from "@/hooks/use-narrate";
@@ -20,6 +21,13 @@ import {
 export interface VoteRecord {
   day: number;
   votes: { id: string; name: string; count: number }[];
+  /** Bulletins détaillés (capitaine : 2 points, éventuellement séparés). */
+  ballots?: {
+    voterId: string;
+    voterName: string;
+    targets: string[];
+    abstained?: boolean;
+  }[];
   eliminated: { id: string; name: string; roleId: string; team: string }[];
   isRevote: boolean;
 }
@@ -240,6 +248,8 @@ export function GameRecapCard({
           </div>
         </div>
       </motion.section>
+
+      <EvaluationSection state={state} voteHistory={voteHistory} />
 
       {/* ── Grille des joueurs (retournement en cascade) ── */}
       <section className="space-y-3">
